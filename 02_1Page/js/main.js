@@ -167,7 +167,17 @@
     $("#filters").appendChild(btn);
   });
 
-  // 연락처
+  // 연락처: 전화번호는 tel: 링크로 바로 걸 수 있게 한다.
+  if (profile.phone) {
+    const tel = `tel:${profile.phone.replace(/[^\d+]/g, "")}`;
+    document.querySelectorAll(".js-tel").forEach((a) => {
+      a.href = tel;
+      a.setAttribute("aria-label", `${profile.phone}로 전화 걸기`);
+    });
+    $("#phone-text").textContent = profile.phone;
+  } else {
+    $("#phone-link").hidden = true;
+  }
   const emailLink = $("#email-link");
   emailLink.href = `mailto:${profile.email}`;
   emailLink.textContent = profile.email;

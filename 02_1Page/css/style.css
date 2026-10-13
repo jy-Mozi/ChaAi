@@ -463,7 +463,17 @@ section[id] { scroll-margin-top: var(--header-h); }
 .contact-card .section-num { color: rgba(255, 255, 255, 0.8); background: none; -webkit-background-clip: border-box; background-clip: border-box; }
 .contact-title { margin-top: 10px; font-size: clamp(32px, 5vw, 48px); font-weight: 800; letter-spacing: -0.03em; }
 .contact-lead { margin-top: 12px; font-size: 18px; color: rgba(255, 255, 255, 0.85); }
-.email-row { margin-top: 36px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 14px; }
+.phone {
+  display: inline-flex; align-items: center; gap: 12px; margin-top: 36px;
+  padding: 14px 28px; border-radius: 999px; background: #fff; color: #3b4cca;
+  font-size: clamp(20px, 3.5vw, 26px); font-weight: 800; letter-spacing: -0.01em;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18); transition: transform .2s, box-shadow .2s;
+}
+.phone:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24); }
+.phone .btn-icon { width: 24px; height: 24px; }
+.phone[hidden] { display: none; }
+.btn-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.email-row { margin-top: 24px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 14px; }
 .email { font-size: clamp(22px, 4vw, 32px); font-weight: 700; letter-spacing: -0.02em; overflow-wrap: anywhere; border-bottom: 2px solid rgba(255, 255, 255, 0.4); }
 .email:hover { border-color: #fff; }
 .links { margin-top: 32px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
