@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>계산기 Codex</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#101721;color:#edf2fa}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:28px}
+main{width:min(900px,100%)}header{margin-bottom:24px}h1{font-size:27px;margin:0 0 7px;letter-spacing:-1px}header p{color:#9cacc1;margin:0;font-size:14px}
+.layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px}.card{background:#1b2533;border:1px solid #334257;border-radius:22px;padding:22px;box-shadow:0 16px 45px #0003}
+.display{background:#0e1620;border:1px solid #34475b;border-radius:14px;padding:22px 18px;margin-bottom:20px;text-align:right;min-height:134px}
+#expression{font-size:19px;min-height:29px;color:#9fbed7;white-space:pre-wrap;overflow-wrap:anywhere}#result{font-size:clamp(26px,4vw,40px);font-weight:650;line-height:1.35;margin-top:12px;overflow-wrap:anywhere}#result.error{font-size:22px;color:#ffb1ac}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}button{font:inherit;border:1px solid #3b4b60;color:inherit;background:#2b394b;border-radius:12px;cursor:pointer;transition:background .15s,transform .1s}button:hover{background:#3b4d65}button:active{transform:translateY(1px)}button:focus-visible{outline:3px solid #9be4da;outline-offset:3px}.keys button{height:58px;font-size:23px;font-weight:550}.keys .operator{background:#24494e;color:#b1f3e5}.keys .clear{color:#ffc1b6}.keys .equals{background:#8cdecb;color:#102c27;grid-column:span 2}.keys .equals:hover{background:#a9f0df}.hint{font-size:12px;color:#9cacc1;line-height:1.7;margin:17px 0 0}
+.history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:18px}h2{font-size:18px;margin:0}.history-head button{padding:8px 12px;font-size:12px}#history{list-style:none;padding:0;margin:0;max-height:454px;overflow:auto}#history li{margin-bottom:10px}#history button{width:100%;padding:14px;text-align:left;line-height:1.6;overflow-wrap:anywhere;font-size:15px}.empty{color:#91a2b8;font-size:14px;line-height:1.8}#storage-note{font-size:12px;color:#e8b47f;line-height:1.6;margin-top:15px}
+@media(max-width:650px){body{padding:20px 12px}.layout{grid-template-columns:1fr}.card{padding:18px}#history{max-height:260px}.keys button{height:56px}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>계산기 <span style="color:#8cdecb">Codex</span></h1><p>괄호와 연산 순서를 지키는, 나만의 오프라인 계산기</p></header>
+<div class="layout">
+<section class="card" aria-label="계산기">
+<div class="display"><div id="expression" aria-label="입력 수식">0</div><div id="result" role="status" aria-live="polite" aria-atomic="true">0</div></div>
+<div class="keys">
+<button class="clear" data-action="clear" aria-label="모두 지우기">C</button><button data-input="(">(</button><button data-input=")">)</button><button data-action="backspace" aria-label="한 글자 지우기">←</button>
+<button data-input="7">7</button><button data-input="8">8</button><button data-input="9">9</button><button class="operator" data-input="/" aria-label="나누기">÷</button>
+<button data-input="4">4</button><button data-input="5">5</button><button data-input="6">6</button><button class="operator" data-input="*" aria-label="곱하기">×</button>
+<button data-input="1">1</button><button data-input="2">2</button><button data-input="3">3</button><button class="operator" data-input="-" aria-label="빼기">−</button>
+<button data-input="0">0</button><button data-input=".">.</button><button class="operator" data-input="+" aria-label="더하기">+</button><button data-action="calculate" class="equals" style="grid-column:auto" aria-label="계산">=</button>
+</div>
+<p class="hint">Enter 계산 · Backspace 한 글자 삭제 · Esc 초기화<br>곱셈·나눗셈을 먼저 계산합니다. 괄호 앞에는 ×를 입력하세요.</p>
+</section>
+<aside class="card" aria-label="계산 기록">
+<div class="history-head"><h2>계산 기록</h2><button id="clear-history">기록 지우기</button></div>
+<ul id="history"></ul><p id="empty-history" class="empty">아직 계산 기록이 없습니다.<br>계산한 수식을 누르면 다시 불러옵니다.</p>
+<p id="storage-note" role="status"></p>
+</aside>
+</div>
+</main>
+<script>
+"use strict";
+// 소수를 정수 비율로 계산하여 이진 부동소수점 오차를 피합니다.
+function gcd(a,b){a=a<0n?-a:a;while(b){[a,b]=[b,a%b]}return a}
+function rational(n,d=1n){if(d===0n)throw new Error('0으로 나눌 수 없습니다');if(d<0n){n=-n;d=-d}const g=gcd(n,d);return {n:n/g,d:d/g}}
+function operate(a,b,op){switch(op){case '+':return rational(a.n*b.d+b.n*a.d,a.d*b.d);case '-':return rational(a.n*b.d-b.n*a.d,a.d*b.d);case '*':return rational(a.n*b.n,a.d*b.d);case '/':return rational(a.n*b.d,a.d*b.n)}}
+function evaluate(source){
+ if(!source||source.length>500)throw new Error(source?'수식은 500자까지 입력할 수 있습니다':'수식을 입력하세요');
+ let i=0;
+ const invalid=()=>{throw new Error('수식과 괄호를 확인하세요')};
+ function primary(){
+  if(source[i]==='+'||source[i]==='-'){const sign=source[i++];const v=primary();return sign==='-'?rational(-v.n,v.d):v}
+  if(source[i]==='('){i++;const value=sum();if(source[i++]!==')')invalid();return value}
+  const match=source.slice(i).match(/^(?:\d+(?:\.\d*)?|\.\d+)/);if(!match)invalid();
+  const value=match[0];i+=value.length;const parts=value.split('.');const decimals=parts[1]||'';
+  return rational(BigInt((parts[0]||'0')+decimals),10n**BigInt(decimals.length));
+ }
+ function product(){let value=primary();while(source[i]==='*'||source[i]==='/'){const op=source[i++];value=operate(value,primary(),op)}return value}
+ function sum(){let value=product();while(source[i]==='+'||source[i]==='-'){const op=source[i++];value=operate(value,product(),op)}return value}
+ const value=sum();if(i!==source.length)invalid();return value;
+}
+// 최대 15개 유효 숫자로 반올림하고 불필요한 소수 끝자리 0을 제거합니다.
+function format(value){
+ if(value.n===0n)return '0';
+ const negative=value.n<0n;let n=negative?-value.n:value.n;const d=value.d;
+ let exponent=n.toString().length-d.toString().length;
+ if(exponent>=0 ? n<d*10n**BigInt(exponent) : n*10n**BigInt(-exponent)<d)exponent--;
+ const scale=14-exponent;
+ const numerator=scale>=0?n*10n**BigInt(scale):n;
+ const denominator=scale>=0?d:d*10n**BigInt(-scale);
+ let rounded=numerator/denominator;if((numerator%denominator)*2n>=denominator)rounded++;
+ let text=rounded.toString();
+ if(scale>0){text=text.padStart(scale+1,'0');text=text.slice(0,-scale)+'.'+text.slice(-scale);text=text.replace(/0+$/,'').replace(/\.$/,'')}
+ else text+='0'.repeat(-scale);
+ return (negative?'-':'')+text;
+}
+const storageKey='codex-offline-calculator-history-v1';
+const expressionEl=document.getElementById('expression'),resultEl=document.getElementById('result');
+const historyEl=document.getElementById('history'),emptyEl=document.getElementById('empty-history'),storageNote=document.getElementById('storage-note');
+let expression='',lastResult='0',completed=false,records=[];
+function pretty(text){return text.replace(/\*/g,'×').replace(/\//g,'÷').replace(/-/g,'−')}
+function paint(){expressionEl.textContent=pretty(expression)||'0';expressionEl.scrollTop=expressionEl.scrollHeight}
+function showResult(text,error=false){resultEl.textContent=text;resultEl.classList.toggle('error',error)}
+function storageError(){storageNote.textContent='브라우저가 저장을 허용하지 않아 기록은 이번 창에서만 유지됩니다.'}
+function save(){try{localStorage.setItem(storageKey,JSON.stringify(records));storageNote.textContent=''}catch{storageError()}}
+function renderHistory(){historyEl.replaceChildren();emptyEl.hidden=records.length>0;for(const record of records){const li=document.createElement('li'),button=document.createElement('button');button.textContent=pretty(record.expression)+' = '+record.result;button.title='이 수식 다시 불러오기';button.addEventListener('click',()=>{expression=record.expression;lastResult=record.result;completed=false;showResult(record.result);paint()});li.append(button);historyEl.append(li)}}
+try{const saved=JSON.parse(localStorage.getItem(storageKey)||'[]');if(Array.isArray(saved))records=saved.filter(v=>v&&typeof v.expression==='string'&&v.expression.length<=500&&/^[\d.+*/()\-]+$/.test(v.expression)&&typeof v.result==='string'&&v.result.length<=1000)}catch{storageError()}
+renderHistory();
+function input(character){
+ if(completed){expression=/^[+*/-]$/.test(character)?lastResult:'';completed=false}
+ if(expression.length>=500){showResult('수식은 500자까지 입력할 수 있습니다',true);return}
+ if(character==='.'){const number=expression.match(/[\d.]*$/)[0];if(number.includes('.'))return;if(!number)character='0.'}
+ expression+=character;showResult(lastResult);paint();
+}
+function calculate(){try{const result=format(evaluate(expression));lastResult=result;showResult(result);completed=true;records.unshift({expression,result});renderHistory();save()}catch(error){completed=false;showResult(error.message,true)}paint()}
+function action(name){if(name==='calculate')calculate();else if(name==='clear'){expression='';lastResult='0';completed=false;showResult('0');paint()}else if(name==='backspace'){expression=expression.slice(0,-1);completed=false;showResult(lastResult);paint()}}
+document.querySelector('.keys').addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.input)input(button.dataset.input);else action(button.dataset.action)});
+document.getElementById('clear-history').addEventListener('click',()=>{records=[];renderHistory();save()});
+document.addEventListener('keydown',event=>{if(event.ctrlKey||event.metaKey||event.altKey||event.isComposing)return;if(/^[\d.+*/()\-]$/.test(event.key)){event.preventDefault();input(event.key)}else{const name={Enter:'calculate','=':'calculate',Backspace:'backspace',Escape:'clear'}[event.key];if(name){event.preventDefault();action(name)}}});
+</script>
+</body>
+</html>
