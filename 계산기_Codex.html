@@ -12,6 +12,7 @@ main{width:min(900px,100%)}header{margin-bottom:24px}h1{font-size:27px;margin:0 
 .display{background:#0e1620;border:1px solid #34475b;border-radius:14px;padding:22px 18px;margin-bottom:20px;text-align:right;min-height:134px}
 #expression{font-size:19px;min-height:29px;color:#9fbed7;white-space:pre-wrap;overflow-wrap:anywhere}#result{font-size:clamp(26px,4vw,40px);font-weight:650;line-height:1.35;margin-top:12px;overflow-wrap:anywhere}#result.error{font-size:22px;color:#ffb1ac}
 .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}button{font:inherit;border:1px solid #3b4b60;color:inherit;background:#2b394b;border-radius:12px;cursor:pointer;transition:background .15s,transform .1s}button:hover{background:#3b4d65}button:active{transform:translateY(1px)}button:focus-visible{outline:3px solid #9be4da;outline-offset:3px}.keys button{height:58px;font-size:23px;font-weight:550}.keys .operator{background:#24494e;color:#b1f3e5}.keys .clear{color:#ffc1b6}.keys .equals{background:#8cdecb;color:#102c27;grid-column:span 2}.keys .equals:hover{background:#a9f0df}.hint{font-size:12px;color:#9cacc1;line-height:1.7;margin:17px 0 0}
+.mode{display:flex;align-items:center;gap:10px;margin:0 0 8px;font-size:15px;cursor:pointer}.mode input{width:20px;height:20px;accent-color:#8cdecb}.mode input:focus-visible{outline:3px solid #9be4da;outline-offset:3px}.mode-help{color:#9cacc1;font-size:12px;line-height:1.7;margin:0 0 18px}
 .history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:18px}h2{font-size:18px;margin:0}.history-head button{padding:8px 12px;font-size:12px}#history{list-style:none;padding:0;margin:0;max-height:454px;overflow:auto}#history li{margin-bottom:10px}#history button{width:100%;padding:14px;text-align:left;line-height:1.6;overflow-wrap:anywhere;font-size:15px}.empty{color:#91a2b8;font-size:14px;line-height:1.8}#storage-note{font-size:12px;color:#e8b47f;line-height:1.6;margin-top:15px}
 @media(max-width:650px){body{padding:20px 12px}.layout{grid-template-columns:1fr}.card{padding:18px}#history{max-height:260px}.keys button{height:56px}}
 </style>
@@ -22,6 +23,8 @@ main{width:min(900px,100%)}header{margin-bottom:24px}h1{font-size:27px;margin:0 
 <div class="layout">
 <section class="card" aria-label="계산기">
 <div class="display"><div id="expression" aria-label="입력 수식">0</div><div id="result" role="status" aria-live="polite" aria-atomic="true">0</div></div>
+<label class="mode"><input id="chain-mode" type="checkbox" aria-describedby="mode-help">수식 이어가기</label>
+<p id="mode-help" class="mode-help">켜면 계산 후에도 앞 수식을 괄호로 묶어 연결하고, 이어지는 계산을 하나의 기록으로 갱신합니다.</p>
 <div class="keys">
 <button class="clear" data-action="clear" aria-label="모두 지우기">C</button><button data-input="(">(</button><button data-input=")">)</button><button data-action="backspace" aria-label="한 글자 지우기">←</button>
 <button data-input="7">7</button><button data-input="8">8</button><button data-input="9">9</button><button class="operator" data-input="/" aria-label="나누기">÷</button>
@@ -77,25 +80,28 @@ function format(value){
 const storageKey='codex-offline-calculator-history-v1';
 const expressionEl=document.getElementById('expression'),resultEl=document.getElementById('result');
 const historyEl=document.getElementById('history'),emptyEl=document.getElementById('empty-history'),storageNote=document.getElementById('storage-note');
-let expression='',lastResult='0',completed=false,records=[];
+const chainMode=document.getElementById('chain-mode');
+let expression='',lastResult='0',completed=false,records=[],chainRecord=null;
 function pretty(text){return text.replace(/\*/g,'×').replace(/\//g,'÷').replace(/-/g,'−')}
 function paint(){expressionEl.textContent=pretty(expression)||'0';expressionEl.scrollTop=expressionEl.scrollHeight}
 function showResult(text,error=false){resultEl.textContent=text;resultEl.classList.toggle('error',error)}
 function storageError(){storageNote.textContent='브라우저가 저장을 허용하지 않아 기록은 이번 창에서만 유지됩니다.'}
 function save(){try{localStorage.setItem(storageKey,JSON.stringify(records));storageNote.textContent=''}catch{storageError()}}
-function renderHistory(){historyEl.replaceChildren();emptyEl.hidden=records.length>0;for(const record of records){const li=document.createElement('li'),button=document.createElement('button');button.textContent=pretty(record.expression)+' = '+record.result;button.title='이 수식 다시 불러오기';button.addEventListener('click',()=>{expression=record.expression;lastResult=record.result;completed=false;showResult(record.result);paint()});li.append(button);historyEl.append(li)}}
+function renderHistory(){historyEl.replaceChildren();emptyEl.hidden=records.length>0;for(const record of records){const li=document.createElement('li'),button=document.createElement('button');button.textContent=pretty(record.expression)+' = '+record.result;button.title='이 수식 다시 불러오기';button.addEventListener('click',()=>{expression=record.expression;lastResult=record.result;completed=chainMode.checked;chainRecord=null;showResult(record.result);paint()});li.append(button);historyEl.append(li)}}
 try{const saved=JSON.parse(localStorage.getItem(storageKey)||'[]');if(Array.isArray(saved))records=saved.filter(v=>v&&typeof v.expression==='string'&&v.expression.length<=500&&/^[\d.+*/()\-]+$/.test(v.expression)&&typeof v.result==='string'&&v.result.length<=1000)}catch{storageError()}
 renderHistory();
 function input(character){
- if(completed){expression=/^[+*/-]$/.test(character)?lastResult:'';completed=false}
- if(expression.length>=500){showResult('수식은 500자까지 입력할 수 있습니다',true);return}
- if(character==='.'){const number=expression.match(/[\d.]*$/)[0];if(number.includes('.'))return;if(!number)character='0.'}
- expression+=character;showResult(lastResult);paint();
+ let next=expression,newChain=false;
+ if(completed){if(/^[+*/-]$/.test(character))next=chainMode.checked?'('+expression+')':lastResult;else{next='';newChain=true}}
+ if(character==='.'){const number=next.match(/[\d.]*$/)[0];if(number.includes('.'))return;if(!number)character='0.'}
+ if(next.length+character.length>500){showResult('수식은 500자까지 입력할 수 있습니다',true);return}
+ expression=next+character;completed=false;if(newChain)chainRecord=null;showResult(lastResult);paint();
 }
-function calculate(){try{const result=format(evaluate(expression));lastResult=result;showResult(result);completed=true;records.unshift({expression,result});renderHistory();save()}catch(error){completed=false;showResult(error.message,true)}paint()}
-function action(name){if(name==='calculate')calculate();else if(name==='clear'){expression='';lastResult='0';completed=false;showResult('0');paint()}else if(name==='backspace'){expression=expression.slice(0,-1);completed=false;showResult(lastResult);paint()}}
+function calculate(){try{const result=format(evaluate(expression));lastResult=result;showResult(result);completed=true;if(chainMode.checked&&chainRecord&&records.includes(chainRecord)){chainRecord.expression=expression;chainRecord.result=result}else{const record={expression,result};records.unshift(record);chainRecord=chainMode.checked?record:null}renderHistory();save()}catch(error){completed=false;showResult(error.message,true)}paint()}
+function action(name){if(name==='calculate')calculate();else if(name==='clear'){expression='';lastResult='0';completed=false;chainRecord=null;showResult('0');paint()}else if(name==='backspace'){expression=expression.slice(0,-1);completed=false;showResult(lastResult);paint()}}
 document.querySelector('.keys').addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;if(button.dataset.input)input(button.dataset.input);else action(button.dataset.action)});
-document.getElementById('clear-history').addEventListener('click',()=>{records=[];renderHistory();save()});
+chainMode.addEventListener('change',()=>{chainRecord=null});
+document.getElementById('clear-history').addEventListener('click',()=>{records=[];chainRecord=null;renderHistory();save()});
 document.addEventListener('keydown',event=>{if(event.ctrlKey||event.metaKey||event.altKey||event.isComposing)return;if(/^[\d.+*/()\-]$/.test(event.key)){event.preventDefault();input(event.key)}else{const name={Enter:'calculate','=':'calculate',Backspace:'backspace',Escape:'clear'}[event.key];if(name){event.preventDefault();action(name)}}});
 </script>
 </body>
